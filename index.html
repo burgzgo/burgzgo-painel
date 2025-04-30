@@ -118,6 +118,10 @@
     #mainContent {
       display: none;
     }
+    .estoque-baixo {
+      background-color: #FF6347;
+      color: white;
+    }
     @media (max-width: 768px) {
       body {
         padding: 1rem;
@@ -252,6 +256,63 @@
       </table>
     </div>
 
+    <!-- Seção: Controle de Estoque -->
+    <div class="section">
+      <h2>📦 Controle de Estoque</h2>
+      <h3>Cadastro de Ingredientes</h3>
+      <div>
+        <input type="text" id="nomeIngrediente" placeholder="Nome do Ingrediente" />
+        <select id="unidadeIngrediente">
+          <option value="kg">Quilograma (kg)</option>
+          <option value="unid">Unidade (unid)</option>
+          <option value="litro">Litro (L)</option>
+        </select>
+        <input type="number" id="quantidadeIngrediente" placeholder="Quantidade Inicial" min="0" step="0.01" />
+        <input type="number" id="custoUnitarioIngrediente" placeholder="Custo Unitário (R$)" min="0" step="0.01" />
+        <input type="number" id="estoqueMinimoIngrediente" placeholder="Estoque Mínimo" min="0" step="0.01" />
+        <button onclick="salvarIngrediente()">Salvar Ingrediente</button>
+      </div>
+      <div id="erroIngrediente" class="error"></div>
+      <table id="tabelaIngredientes">
+        <tr><th>Nome</th><th>Unidade</th><th>Quantidade</th><th>Custo Unitário</th><th>Estoque Mínimo</th><th>Valor Total</th><th>Ações</th></tr>
+      </table>
+
+      <h3>Movimentações de Estoque</h3>
+      <div>
+        <select id="ingredienteMovimentacao">
+          <option value="">Selecione um Ingrediente</option>
+        </select>
+        <select id="tipoMovimentacao">
+          <option value="entrada">Entrada (Compra)</option>
+          <option value="saida">Saída (Uso/Perda)</option>
+        </select>
+        <input type="number" id="quantidadeMovimentacao" placeholder="Quantidade" min="0" step="0.01" />
+        <input type="text" id="fornecedorMovimentacao" placeholder="Fornecedor (para entradas)" />
+        <select id="formaPagamentoMovimentacao">
+          <option value="dinheiro">Dinheiro</option>
+          <option value="cartao_credito">Cartão de Crédito</option>
+          <option value="cartao_debito">Cartão de Débito</option>
+          <option value="pix">Pix</option>
+          <option value="boleto">Boleto</option>
+        </select>
+        <input type="text" id="motivoMovimentacao" placeholder="Motivo (para saídas)" />
+        <input type="date" id="dataMovimentacao" />
+        <button onclick="registrarMovimentacaoEstoque()">Registrar Movimentação</button>
+        <button onclick="exportarTabela('estoque')">📁 Exportar Estoque</button>
+        <button onclick="exportarTabela('movimentacoes')">📁 Exportar Movimentações</button>
+      </div>
+      <div id="erroMovimentacao" class="error"></div>
+      <div>
+        <label>Filtrar por período:</label>
+        <input type="date" id="filtroDataInicioMovimentacao" />
+        <input type="date" id="filtroDataFimMovimentacao" />
+        <button onclick="carregarDados()">Filtrar</button>
+      </div>
+      <table id="tabelaMovimentacoes">
+        <tr><th>Ingrediente</th><th>Tipo</th><th>Quantidade</th><th>Fornecedor</th><th>Forma de Pagamento</th><th>Motivo</th><th>Data</th></tr>
+      </table>
+    </div>
+
     <!-- Seção: Dashboard -->
     <div class="section">
       <h2>📊 Dashboard</h2>
@@ -275,6 +336,7 @@
   </div>
 
   <script>
+    // Configuração do Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyALTx6uyV6-_jrKVDSRkbY8lGYCeT5GMCs",
       authDomain: "burgzgo.firebaseapp.com",
@@ -289,15 +351,20 @@
     const auth = firebase.auth();
     let chartLucros, chartDespesas;
 
+    // Função para exibir mensagens de erro temporárias
     function mostrarErro(id, mensagem) {
-      document.getElementById(id).innerText = mensagem;
-      setTimeout(() => document.getElementById(id).innerText = '', 5000);
+      const elemento = document.getElementById(id);
+      elemento.innerText = mensagem;
+      setTimeout(() => elemento.innerText = '', 5000);
     }
 
+    // Função de login
     async function login() {
       const email = document.getElementById('email').value.trim();
       const senha = document.getElementById('senha').value;
-      if (!email || !senha) return mostrarErro('erroLogin', 'Preencha email e senha.');
+      if (!email || !senha) {
+        return mostrarErro('erroLogin', 'Preencha email e senha.');
+      }
 
       try {
         await auth.signInWithEmailAndPassword(email, senha);
@@ -309,6 +376,7 @@
       }
     }
 
+    // Função de logout
     async function logout() {
       await auth.signOut();
       document.getElementById('mainContent').style.display = 'none';
@@ -317,6 +385,7 @@
       document.getElementById('senha').value = '';
     }
 
+    // Monitoramento do estado de autenticação
     auth.onAuthStateChanged(user => {
       if (user) {
         document.getElementById('loginScreen').style.display = 'none';
@@ -328,23 +397,32 @@
       }
     });
 
+    // Função para sugerir preço de hambúrguer
     async function sugerirPreco() {
       const custo = parseFloat(document.getElementById('custoHamburguer').value) || 0;
       const margem = parseFloat(document.getElementById('margem').value) || 0;
-      if (!custo) return;
+      if (!custo) {
+        document.getElementById('sugestaoPreco').innerText = '';
+        return;
+      }
 
-      const snapshot = await db.collection('hamburguers').get();
-      const precos = snapshot.docs.map(doc => doc.data().preco);
-      const custoMedio = snapshot.docs.reduce((sum, doc) => sum + doc.data().custo, 0) / (snapshot.docs.length || 1);
-      const margemMedia = snapshot.docs.reduce((sum, doc) => sum + doc.data().margem, 0) / (snapshot.docs.length || 1);
+      try {
+        const snapshot = await db.collection('hamburguers').get();
+        const precos = snapshot.docs.map(doc => doc.data().preco);
+        const custoMedio = snapshot.docs.reduce((sum, doc) => sum + doc.data().custo, 0) / (snapshot.docs.length || 1);
+        const margemMedia = snapshot.docs.reduce((sum, doc) => sum + doc.data().margem, 0) / (snapshot.docs.length || 1);
 
-      const precoSugerido = custo * (1 + (margem || margemMedia) / 100);
-      const precoMercado = precos.length ? precos.reduce((sum, p) => sum + p, 0) / precos.length : precoSugerido;
-      const precoFinal = (precoSugerido + precoMercado) / 2;
+        const precoSugerido = custo * (1 + (margem || margemMedia) / 100);
+        const precoMercado = precos.length ? precos.reduce((sum, p) => sum + p, 0) / precos.length : precoSugerido;
+        const precoFinal = (precoSugerido + precoMercado) / 2;
 
-      document.getElementById('sugestaoPreco').innerText = `Preço sugerido: R$ ${precoFinal.toFixed(2)} (baseado em custo médio R$ ${custoMedio.toFixed(2)} e margem média ${margemMedia.toFixed(1)}%)`;
+        document.getElementById('sugestaoPreco').innerText = `Preço sugerido: R$ ${precoFinal.toFixed(2)} (baseado em custo médio R$ ${custoMedio.toFixed(2)} e margem média ${margemMedia.toFixed(1)}%)`;
+      } catch (error) {
+        console.error('Erro ao sugerir preço:', error);
+      }
     }
 
+    // Função para salvar hambúrguer
     async function salvarHamburguer() {
       const nome = document.getElementById('nomeHamburguer').value.trim();
       const custo = parseFloat(document.getElementById('custoHamburguer').value);
@@ -356,17 +434,32 @@
       if (isNaN(margem) || margem < 0) return mostrarErro('erroHamburguer', 'Margem deve ser um número positivo.');
       if (isNaN(estoque) || estoque < 0) return mostrarErro('erroHamburguer', 'Estoque deve ser um número não negativo.');
 
-      const preco = custo * (1 + margem / 100);
+      const margemFinal = isNaN(margem) ? 0 : margem;
+      const preco = custo * (1 + margemFinal / 100);
       const lucroUn = preco - custo;
 
-      await db.collection('hamburguers').add({ nome, custo, margem, preco, lucroUn, estoque, timestamp: new Date() });
-      document.getElementById('nomeHamburguer').value = '';
-      document.getElementById('custoHamburguer').value = '';
-      document.getElementById('margem').value = '';
-      document.getElementById('estoque').value = '';
-      document.getElementById('sugestaoPreco').innerText = '';
+      try {
+        await db.collection('hamburguers').add({
+          nome,
+          custo,
+          margem: margemFinal,
+          preco,
+          lucroUn,
+          estoque,
+          timestamp: new Date()
+        });
+        document.getElementById('nomeHamburguer').value = '';
+        document.getElementById('custoHamburguer').value = '';
+        document.getElementById('margem').value = '';
+        document.getElementById('estoque').value = '';
+        document.getElementById('sugestaoPreco').innerText = '';
+      } catch (error) {
+        mostrarErro('erroHamburguer', 'Erro ao salvar hambúrguer.');
+        console.error('Erro ao salvar hambúrguer:', error);
+      }
     }
 
+    // Função para salvar despesa
     async function salvarDespesa() {
       const tipo = document.getElementById('tipoDespesa').value;
       const descricao = document.getElementById('descDespesa').value.trim();
@@ -379,22 +472,128 @@
       if (isNaN(valor) || valor < 0) return mostrarErro('erroDespesa', 'Valor deve ser um número positivo.');
       if (!fornecedor) return mostrarErro('erroDespesa', 'Fornecedor é obrigatório.');
 
-      await db.collection('despesas').add({
-        tipo,
-        descricao,
-        valor,
-        data: new Date(dataDespesa),
-        fornecedor,
-        formaPagamento,
-        timestamp: new Date()
-      });
-      document.getElementById('descDespesa').value = '';
-      document.getElementById('valorDespesa').value = '';
-      document.getElementById('dataDespesa').value = '';
-      document.getElementById('fornecedorDespesa').value = '';
-      document.getElementById('formaPagamentoDespesa').value = 'dinheiro';
+      try {
+        await db.collection('despesas').add({
+          tipo,
+          descricao,
+          valor,
+          data: new Date(dataDespesa),
+          fornecedor,
+          formaPagamento,
+          timestamp: new Date()
+        });
+        document.getElementById('descDespesa').value = '';
+        document.getElementById('valorDespesa').value = '';
+        document.getElementById('dataDespesa').value = '';
+        document.getElementById('fornecedorDespesa').value = '';
+        document.getElementById('formaPagamentoDespesa').value = 'dinheiro';
+      } catch (error) {
+        mostrarErro('erroDespesa', 'Erro ao salvar despesa.');
+        console.error('Erro ao salvar despesa:', error);
+      }
     }
 
+    // Função para salvar ingrediente
+    async function salvarIngrediente() {
+      const nome = document.getElementById('nomeIngrediente').value.trim();
+      const unidade = document.getElementById('unidadeIngrediente').value;
+      const quantidade = parseFloat(document.getElementById('quantidadeIngrediente').value);
+      const custoUnitario = parseFloat(document.getElementById('custoUnitarioIngrediente').value);
+      const estoqueMinimo = parseFloat(document.getElementById('estoqueMinimoIngrediente').value);
+
+      if (!nome) return mostrarErro('erroIngrediente', 'Nome é obrigatório.');
+      if (!unidade) return mostrarErro('erroIngrediente', 'Unidade é obrigatória.');
+      if (isNaN(quantidade) || quantidade < 0) return mostrarErro('erroIngrediente', 'Quantidade deve ser um número não negativo.');
+      if (isNaN(custoUnitario) || custoUnitario < 0) return mostrarErro('erroIngrediente', 'Custo unitário deve ser um número não negativo.');
+      if (isNaN(estoqueMinimo) || estoqueMinimo < 0) return mostrarErro('erroIngrediente', 'Estoque mínimo deve ser um número não negativo.');
+
+      try {
+        await db.collection('ingredientes').add({
+          nome,
+          unidade,
+          quantidade,
+          custoUnitario,
+          estoqueMinimo,
+          timestamp: new Date()
+        });
+        document.getElementById('nomeIngrediente').value = '';
+        document.getElementById('unidadeIngrediente').value = 'kg';
+        document.getElementById('quantidadeIngrediente').value = '';
+        document.getElementById('custoUnitarioIngrediente').value = '';
+        document.getElementById('estoqueMinimoIngrediente').value = '';
+      } catch (error) {
+        mostrarErro('erroIngrediente', 'Erro ao salvar ingrediente.');
+        console.error('Erro ao salvar ingrediente:', error);
+      }
+    }
+
+    // Função para registrar movimentação de estoque
+    async function registrarMovimentacaoEstoque() {
+      const ingredienteId = document.getElementById('ingredienteMovimentacao').value;
+      const tipo = document.getElementById('tipoMovimentacao').value;
+      const quantidade = parseFloat(document.getElementById('quantidadeMovimentacao').value);
+      const fornecedor = document.getElementById('fornecedorMovimentacao').value.trim();
+      const formaPagamento = document.getElementById('formaPagamentoMovimentacao').value;
+      const motivo = document.getElementById('motivoMovimentacao').value.trim();
+      const dataMovimentacao = document.getElementById('dataMovimentacao').value || new Date().toISOString().split('T')[0];
+
+      if (!ingredienteId) return mostrarErro('erroMovimentacao', 'Selecione um ingrediente.');
+      if (isNaN(quantidade) || quantidade <= 0) return mostrarErro('erroMovimentacao', 'Quantidade deve ser um número positivo.');
+      if (tipo === 'entrada' && !fornecedor) return mostrarErro('erroMovimentacao', 'Fornecedor é obrigatório para entradas.');
+      if (tipo === 'saida' && !motivo) return mostrarErro('erroMovimentacao', 'Motivo é obrigatório para saídas.');
+
+      try {
+        const ingredienteRef = await db.collection('ingredientes').doc(ingredienteId).get();
+        if (!ingredienteRef.exists) return mostrarErro('erroMovimentacao', 'Ingrediente não encontrado.');
+
+        const ingrediente = ingredienteRef.data();
+        let novaQuantidade = ingrediente.quantidade;
+        let custoTotal = 0;
+
+        if (tipo === 'entrada') {
+          novaQuantidade += quantidade;
+          custoTotal = quantidade * ingrediente.custoUnitario;
+          await db.collection('despesas').add({
+            tipo: 'variavel',
+            descricao: `Compra de ${ingrediente.nome}`,
+            valor: custoTotal,
+            data: new Date(dataMovimentacao),
+            fornecedor,
+            formaPagamento,
+            timestamp: new Date()
+          });
+        } else {
+          if (quantidade > ingrediente.quantidade) return mostrarErro('erroMovimentacao', 'Quantidade insuficiente em estoque.');
+          novaQuantidade -= quantidade;
+        }
+
+        await db.collection('ingredientes').doc(ingredienteId).update({ quantidade: novaQuantidade });
+        await db.collection('movimentacoes_estoque').add({
+          ingredienteId,
+          tipo,
+          quantidade,
+          custoTotal: tipo === 'entrada' ? custoTotal : 0,
+          fornecedor: tipo === 'entrada' ? fornecedor : '',
+          formaPagamento: tipo === 'entrada' ? formaPagamento : '',
+          motivo: tipo === 'saida' ? motivo : '',
+          data: new Date(dataMovimentacao),
+          timestamp: new Date()
+        });
+
+        document.getElementById('ingredienteMovimentacao').value = '';
+        document.getElementById('tipoMovimentacao').value = 'entrada';
+        document.getElementById('quantidadeMovimentacao').value = '';
+        document.getElementById('fornecedorMovimentacao').value = '';
+        document.getElementById('formaPagamentoMovimentacao').value = 'dinheiro';
+        document.getElementById('motivoMovimentacao').value = '';
+        document.getElementById('dataMovimentacao').value = '';
+      } catch (error) {
+        mostrarErro('erroMovimentacao', 'Erro ao registrar movimentação.');
+        console.error('Erro ao registrar movimentação:', error);
+      }
+    }
+
+    // Função para registrar venda
     async function registrarVenda() {
       const nome = document.getElementById('nomeVenda').value.trim();
       const qtd = parseInt(document.getElementById('qtdVenda').value);
@@ -403,45 +602,97 @@
       if (!nome) return mostrarErro('erroVenda', 'Nome do hambúrguer é obrigatório.');
       if (isNaN(qtd) || qtd <= 0) return mostrarErro('erroVenda', 'Quantidade deve ser um número positivo.');
 
-      const ref = await db.collection('hamburguers').where("nome", "==", nome).get();
-      if (ref.empty) return mostrarErro('erroVenda', 'Hambúrguer não encontrado.');
+      try {
+        const ref = await db.collection('hamburguers').where("nome", "==", nome).get();
+        if (ref.empty) return mostrarErro('erroVenda', 'Hambúrguer não encontrado.');
 
-      const doc = ref.docs[0];
-      const data = doc.data();
-      if (data.estoque < qtd) return mostrarErro('erroVenda', 'Estoque insuficiente.');
+        const doc = ref.docs[0];
+        const hamburguer = doc.data();
+        if (hamburguer.estoque < qtd) return mostrarErro('erroVenda', 'Estoque insuficiente.');
 
-      const total = data.preco * qtd;
-      const novoEstoque = data.estoque - qtd;
-      await db.collection('hamburguers').doc(doc.id).update({ estoque: novoEstoque });
+        const receitaRef = await db.collection('receitas').where('hamburguerId', '==', doc.id).get();
+        if (!receitaRef.empty) {
+          const receita = receitaRef.docs[0].data();
+          for (const item of receita.ingredientes) {
+            const ingredienteRef = await db.collection('ingredientes').doc(item.ingredienteId).get();
+            if (!ingredienteRef.exists) return mostrarErro('erroVenda', `Ingrediente ${item.ingredienteId} não encontrado.`);
+            const ingrediente = ingredienteRef.data();
+            const quantidadeNecessaria = item.quantidade * qtd;
+            if (ingrediente.quantidade < quantidadeNecessaria) return mostrarErro('erroVenda', `Estoque insuficiente de ${ingrediente.nome}.`);
+            await db.collection('ingredientes').doc(item.ingredienteId).update({
+              quantidade: ingrediente.quantidade - quantidadeNecessaria
+            });
+            await db.collection('movimentacoes_estoque').add({
+              ingredienteId: item.ingredienteId,
+              tipo: 'saida',
+              quantidade: quantidadeNecessaria,
+              custoTotal: 0,
+              fornecedor: '',
+              formaPagamento: '',
+              motivo: `Venda de ${qtd} ${nome}`,
+              data: new Date(dataVenda),
+              timestamp: new Date()
+            });
+          }
+        }
 
-      await db.collection('vendas').add({ nome, qtd, total, data: new Date(dataVenda), timestamp: new Date() });
-      document.getElementById('nomeVenda').value = '';
-      document.getElementById('qtdVenda').value = '';
-      document.getElementById('dataVenda').value = '';
+        const total = hamburguer.preco * qtd;
+        const novoEstoque = hamburguer.estoque - qtd;
+        await db.collection('hamburguers').doc(doc.id).update({ estoque: novoEstoque });
+
+        await db.collection('vendas').add({
+          nome,
+          qtd,
+          total,
+          data: new Date(dataVenda),
+          timestamp: new Date()
+        });
+        document.getElementById('nomeVenda').value = '';
+        document.getElementById('qtdVenda').value = '';
+        document.getElementById('dataVenda').value = '';
+      } catch (error) {
+        mostrarErro('erroVenda', 'Erro ao registrar venda.');
+        console.error('Erro ao registrar venda:', error);
+      }
     }
 
+    // Função para deletar documento
     async function deletarDocumento(colecao, id) {
-      await db.collection(colecao).doc(id).delete();
+      try {
+        await db.collection(colecao).doc(id).delete();
+      } catch (error) {
+        console.error(`Erro ao deletar documento de ${colecao}:`, error);
+      }
     }
 
+    // Função para limpar banco de dados
     async function limparBanco() {
-      if (confirm("Tem certeza que deseja apagar todos os dados?")) {
-        const colecoes = ['hamburguers', 'despesas', 'vendas'];
+      if (!confirm("Tem certeza que deseja apagar todos os dados?")) return;
+
+      try {
+        const colecoes = ['hamburguers', 'despesas', 'vendas', 'ingredientes', 'movimentacoes_estoque', 'receitas'];
         for (const col of colecoes) {
           const snap = await db.collection(col).get();
           const promises = snap.docs.map(doc => db.collection(col).doc(doc.id).delete());
           await Promise.all(promises);
         }
+        alert('Banco de dados limpo com sucesso.');
+      } catch (error) {
+        console.error('Erro ao limpar banco:', error);
+        alert('Erro ao limpar banco de dados.');
       }
     }
 
+    // Função para carregar dados
     function carregarDados() {
       const filtroInicioDespesa = document.getElementById('filtroDataInicioDespesa').value;
       const filtroFimDespesa = document.getElementById('filtroDataFimDespesa').value;
       const filtroInicioVenda = document.getElementById('filtroDataInicioVenda').value;
       const filtroFimVenda = document.getElementById('filtroDataFimVenda').value;
+      const filtroInicioMovimentacao = document.getElementById('filtroDataInicioMovimentacao').value;
+      const filtroFimMovimentacao = document.getElementById('filtroDataFimMovimentacao').value;
 
-      // Hamburguers
+      // Carregar hambúrgueres
       db.collection('hamburguers').onSnapshot(snapshot => {
         let htmlH = "<tr><th>Nome</th><th>Custo</th><th>Margem</th><th>Preço</th><th>Lucro</th><th>Estoque</th><th>Ações</th></tr>";
         snapshot.forEach(doc => {
@@ -449,9 +700,9 @@
           htmlH += `<tr><td contenteditable onblur="editarCampo('${doc.id}', 'hamburguers', 'nome', this)">${d.nome}</td><td contenteditable onblur="editarCampo('${doc.id}', 'hamburguers', 'custo', this)">R$${d.custo.toFixed(2)}</td><td contenteditable onblur="editarCampo('${doc.id}', 'hamburguers', 'margem', this)">${d.margem}%</td><td>R$${d.preco.toFixed(2)}</td><td>R$${d.lucroUn.toFixed(2)}</td><td contenteditable onblur="editarCampo('${doc.id}', 'hamburguers', 'estoque', this)">${d.estoque}</td><td><button class="icon" onclick="deletarDocumento('hamburguers', '${doc.id}')">🗑️</button></td></tr>`;
         });
         document.getElementById('tabelaHamburguers').innerHTML = htmlH;
-      });
+      }, error => console.error('Erro ao carregar hambúrgueres:', error));
 
-      // Despesas
+      // Carregar despesas
       let queryD = db.collection('despesas');
       if (filtroInicioDespesa) queryD = queryD.where('data', '>=', new Date(filtroInicioDespesa));
       if (filtroFimDespesa) queryD = queryD.where('data', '<=', new Date(filtroFimDespesa));
@@ -459,15 +710,15 @@
         let htmlD = "<tr><th>Tipo</th><th>Descrição</th><th>Valor</th><th>Data</th><th>Fornecedor</th><th>Forma de Pagamento</th><th>Ações</th></tr>";
         snapshot.forEach(doc => {
           const d = doc.data();
-          const data = new Date(d.data.seconds * 1000).toLocaleDateString();
+          const data = d.data ? new Date(d.data.seconds * 1000).toLocaleDateString() : 'N/A';
           const formaPagamento = d.formaPagamento ? d.formaPagamento.replace('_', ' ').toUpperCase() : 'N/A';
           htmlD += `<tr><td contenteditable onblur="editarCampo('${doc.id}', 'despesas', 'tipo', this)">${d.tipo}</td><td contenteditable onblur="editarCampo('${doc.id}', 'despesas', 'descricao', this)">${d.descricao}</td><td contenteditable onblur="editarCampo('${doc.id}', 'despesas', 'valor', this)">R$${d.valor.toFixed(2)}</td><td>${data}</td><td contenteditable onblur="editarCampo('${doc.id}', 'despesas', 'fornecedor', this)">${d.fornecedor || 'N/A'}</td><td>${formaPagamento}</td><td><button class="icon" onclick="deletarDocumento('despesas', '${doc.id}')">🗑️</button></td></tr>`;
         });
         document.getElementById('tabelaDespesas').innerHTML = htmlD;
         atualizarDashboard();
-      });
+      }, error => console.error('Erro ao carregar despesas:', error));
 
-      // Vendas
+      // Carregar vendas
       let queryV = db.collection('vendas').orderBy("data", "desc");
       if (filtroInicioVenda) queryV = queryV.where('data', '>=', new Date(filtroInicioVenda));
       if (filtroFimVenda) queryV = queryV.where('data', '<=', new Date(filtroFimVenda));
@@ -475,64 +726,114 @@
         let htmlV = "<tr><th>Produto</th><th>Qtd</th><th>Total</th><th>Data</th></tr>";
         snapshot.forEach(doc => {
           const d = doc.data();
-          const data = new Date(d.data.seconds * 1000).toLocaleDateString();
+          const data = d.data ? new Date(d.data.seconds * 1000).toLocaleDateString() : 'N/A';
           htmlV += `<tr><td>${d.nome}</td><td>${d.qtd}</td><td>R$${d.total.toFixed(2)}</td><td>${data}</td></tr>`;
         });
         document.getElementById('tabelaVendas').innerHTML = htmlV;
         atualizarDashboard();
-      });
+      }, error => console.error('Erro ao carregar vendas:', error));
+
+      // Carregar ingredientes
+      db.collection('ingredientes').onSnapshot(snapshot => {
+        let htmlI = "<tr><th>Nome</th><th>Unidade</th><th>Quantidade</th><th>Custo Unitário</th><th>Estoque Mínimo</th><th>Valor Total</th><th>Ações</th></tr>";
+        let selectOptions = '<option value="">Selecione um Ingrediente</option>';
+        snapshot.forEach(doc => {
+          const d = doc.data();
+          const valorTotal = (d.quantidade * d.custoUnitario).toFixed(2);
+          const classeEstoqueBaixo = d.quantidade <= d.estoqueMinimo ? 'estoque-baixo' : '';
+          htmlI += `<tr class="${classeEstoqueBaixo}"><td contenteditable onblur="editarCampo('${doc.id}', 'ingredientes', 'nome', this)">${d.nome}</td><td>${d.unidade}</td><td contenteditable onblur="editarCampo('${doc.id}', 'ingredientes', 'quantidade', this)">${d.quantidade.toFixed(2)}</td><td contenteditable onblur="editarCampo('${doc.id}', 'ingredientes', 'custoUnitario', this)">R$${d.custoUnitario.toFixed(2)}</td><td contenteditable onblur="editarCampo('${doc.id}', 'ingredientes', 'estoqueMinimo', this)">${d.estoqueMinimo.toFixed(2)}</td><td>R$${valorTotal}</td><td><button class="icon" onclick="deletarDocumento('ingredientes', '${doc.id}')">🗑️</button></td></tr>`;
+          selectOptions += `<option value="${doc.id}">${d.nome}</option>`;
+        });
+        document.getElementById('tabelaIngredientes').innerHTML = htmlI;
+        document.getElementById('ingredienteMovimentacao').innerHTML = selectOptions;
+      }, error => console.error('Erro ao carregar ingredientes:', error));
+
+      // Carregar movimentações de estoque
+      let queryM = db.collection('movimentacoes_estoque').orderBy('data', 'desc');
+      if (filtroInicioMovimentacao) queryM = queryM.where('data', '>=', new Date(filtroInicioMovimentacao));
+      if (filtroFimMovimentacao) queryM = queryM.where('data', '<=', new Date(filtroFimMovimentacao));
+      queryM.onSnapshot(async snapshot => {
+        let htmlM = "<tr><th>Ingrediente</th><th>Tipo</th><th>Quantidade</th><th>Fornecedor</th><th>Forma de Pagamento</th><th>Motivo</th><th>Data</th></tr>";
+        for (const doc of snapshot.docs) {
+          const d = doc.data();
+          const ingredienteRef = await db.collection('ingredientes').doc(d.ingredienteId).get();
+          const ingredienteNome = ingredienteRef.exists ? ingredienteRef.data().nome : 'Desconhecido';
+          const data = d.data ? new Date(d.data.seconds * 1000).toLocaleDateString() : 'N/A';
+          const formaPagamento = d.formaPagamento ? d.formaPagamento.replace('_', ' ').toUpperCase() : 'N/A';
+          htmlM += `<tr><td>${ingredienteNome}</td><td>${d.tipo}</td><td>${d.quantidade.toFixed(2)}</td><td>${d.fornecedor || 'N/A'}</td><td>${formaPagamento}</td><td>${d.motivo || 'N/A'}</td><td>${data}</td></tr>`;
+        }
+        document.getElementById('tabelaMovimentacoes').innerHTML = htmlM;
+      }, error => console.error('Erro ao carregar movimentações:', error));
     }
 
+    // Função para atualizar dashboard
     async function atualizarDashboard() {
       const filtroInicioVenda = document.getElementById('filtroDataInicioVenda').value;
       const filtroFimVenda = document.getElementById('filtroDataFimVenda').value;
       const filtroInicioDespesa = document.getElementById('filtroDataInicioDespesa').value;
       const filtroFimDespesa = document.getElementById('filtroDataFimDespesa').value;
 
-      let queryV = db.collection('vendas');
-      if (filtroInicioVenda) queryV = queryV.where('data', '>=', new Date(filtroInicioVenda));
-      if (filtroFimVenda) queryV = queryV.where('data', '<=', new Date(filtroFimVenda));
-      const snapshotV = await queryV.get();
+      try {
+        let queryV = db.collection('vendas');
+        if (filtroInicioVenda) queryV = queryV.where('data', '>=', new Date(filtroInicioVenda));
+        if (filtroFimVenda) queryV = queryV.where('data', '<=', new Date(filtroFimVenda));
+        const snapshotV = await queryV.get();
 
-      let queryD = db.collection('despesas');
-      if (filtroInicioDespesa) queryD = queryD.where('data', '>=', new Date(filtroInicioDespesa));
-      if (filtroFimDespesa) queryD = queryD.where('data', '<=', new Date(filtroFimDespesa));
-      const snapshotD = await queryD.get();
+        let queryD = db.collection('despesas');
+        if (filtroInicioDespesa) queryD = queryD.where('data', '>=', new Date(filtroInicioDespesa));
+        if (filtroFimDespesa) queryD = queryD.where('data', '<=', new Date(filtroFimDespesa));
+        const snapshotD = await queryD.get();
 
-      const totalVendas = snapshotV.docs.reduce((sum, doc) => sum + doc.data().total, 0);
-      const totalDespesas = snapshotD.docs.reduce((sum, doc) => sum + doc.data().valor, 0);
-      const lucroLiquido = totalVendas - totalDespesas;
-      document.getElementById('lucroLiquido').innerText = `Lucro Líquido: R$ ${lucroLiquido.toFixed(2)}`;
+        const totalVendas = snapshotV.docs.reduce((sum, doc) => sum + doc.data().total, 0);
+        const totalDespesas = snapshotD.docs.reduce((sum, doc) => sum + doc.data().valor, 0);
+        const lucroLiquido = totalVendas - totalDespesas;
+        document.getElementById('lucroLiquido').innerText = `Lucro Líquido: R$ ${lucroLiquido.toFixed(2)}`;
 
-      atualizarGraficos(snapshotV, snapshotD);
+        atualizarGraficos(snapshotV, snapshotD);
+      } catch (error) {
+        console.error('Erro ao atualizar dashboard:', error);
+      }
     }
 
+    // Função para editar campos nas tabelas
     async function editarCampo(id, colecao, campo, elemento) {
       let valor = elemento.innerText.replace(/[R$%]/g, '').trim();
       if (!valor) return mostrarErro('erro' + colecao.charAt(0).toUpperCase() + colecao.slice(1), 'Campo não pode ser vazio.');
-      if (campo === 'valor' || campo === 'custo' || campo === 'margem' || campo === 'estoque') {
-        valor = parseFloat(valor);
-        if (isNaN(valor) || valor < 0) return mostrarErro('erro' + colecao.charAt(0).toUpperCase() + colecao.slice(1), 'Valor deve ser um número não negativo.');
+
+      try {
+        if (campo === 'valor' || campo === 'custo' || campo === 'margem' || campo === 'estoque' || campo === 'quantidade' || campo === 'custoUnitario' || campo === 'estoqueMinimo') {
+          valor = parseFloat(valor);
+          if (isNaN(valor) || valor < 0) return mostrarErro('erro' + colecao.charAt(0).toUpperCase() + colecao.slice(1), 'Valor deve ser um número não negativo.');
+        }
+        await db.collection(colecao).doc(id).update({ [campo]: valor });
+      } catch (error) {
+        mostrarErro('erro' + colecao.charAt(0).toUpperCase() + colecao.slice(1), 'Erro ao editar campo.');
+        console.error('Erro ao editar campo:', error);
       }
-      await db.collection(colecao).doc(id).update({ [campo]: valor });
     }
 
+    // Função para exportar tabelas
     function exportarTabela(tipo) {
-      const id = tipo === 'hamburguers' ? 'tabelaHamburguers' : 'tabelaDespesas';
+      const id = tipo === 'hamburguers' ? 'tabelaHamburguers' : tipo === 'despesas' ? 'tabelaDespesas' : tipo === 'estoque' ? 'tabelaIngredientes' : 'tabelaMovimentacoes';
       const table = document.getElementById(id);
-      const wb = XLSX.utils.table_to_book(table, { sheet: tipo });
-      XLSX.writeFile(wb, `${tipo}.xlsx`);
+      try {
+        const wb = XLSX.utils.table_to_book(table, { sheet: tipo });
+        XLSX.writeFile(wb, `${tipo}.xlsx`);
 
-      const csv = tableToCSV(table);
-      downloadCSV(csv, `${tipo}.csv`);
+        const csv = tableToCSV(table);
+        downloadCSV(csv, `${tipo}.csv`);
 
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF();
-      doc.text(`Relatório: ${tipo}`, 10, 10);
-      doc.autoTable({ html: `#${id}` });
-      doc.save(`${tipo}.pdf`);
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        doc.text(`Relatório: ${tipo}`, 10, 10);
+        doc.autoTable({ html: `#${id}` });
+        doc.save(`${tipo}.pdf`);
+      } catch (error) {
+        console.error('Erro ao exportar tabela:', error);
+      }
     }
 
+    // Função para converter tabela em CSV
     function tableToCSV(table) {
       const rows = Array.from(table.querySelectorAll('tr'));
       const csv = rows.map(row => {
@@ -542,6 +843,7 @@
       return csv;
     }
 
+    // Função para baixar arquivo CSV
     function downloadCSV(csv, filename) {
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
@@ -551,179 +853,238 @@
       URL.revokeObjectURL(link.href);
     }
 
+    // Função para exportar relatório consolidado
     async function exportarRelatorioConsolidado() {
-      const snapshotH = await db.collection('hamburguers').get();
-      const snapshotD = await db.collection('despesas').get();
-      const snapshotV = await db.collection('vendas').orderBy("data", "desc").get();
+      try {
+        const snapshotH = await db.collection('hamburguers').get();
+        const snapshotD = await db.collection('despesas').get();
+        const snapshotV = await db.collection('vendas').orderBy("data", "desc").get();
+        const snapshotI = await db.collection('ingredientes').get();
+        const snapshotM = await db.collection('movimentacoes_estoque').orderBy("data", "desc").get();
 
-      const wb = XLSX.utils.book_new();
+        const wb = XLSX.utils.book_new();
 
-      const hamburguersData = snapshotH.docs.map(doc => {
-        const d = doc.data();
-        return [d.nome, d.custo.toFixed(2), d.margem, d.preco.toFixed(2), d.lucroUn.toFixed(2), d.estoque];
-      });
-      const wsH = XLSX.utils.aoa_to_sheet([['Nome', 'Custo (R$)', 'Margem (%)', 'Preço (R$)', 'Lucro (R$)', 'Estoque'], ...hamburguersData]);
-      XLSX.utils.book_append_sheet(wb, wsH, 'Hamburguers');
+        const hamburguersData = snapshotH.docs.map(doc => {
+          const d = doc.data();
+          return [d.nome, d.custo.toFixed(2), d.margem, d.preco.toFixed(2), d.lucroUn.toFixed(2), d.estoque];
+        });
+        const wsH = XLSX.utils.aoa_to_sheet([['Nome', 'Custo (R$)', 'Margem (%)', 'Preço (R$)', 'Lucro (R$)', 'Estoque'], ...hamburguersData]);
+        XLSX.utils.book_append_sheet(wb, wsH, 'Hamburguers');
 
-      const despesasData = snapshotD.docs.map(doc => {
-        const d = doc.data();
-        const data = new Date(d.data.seconds * 1000).toLocaleDateString();
-        const formaPagamento = d.formaPagamento ? d.formaPagamento.replace('_', ' ').toUpperCase() : 'N/A';
-        return [d.tipo, d.descricao, d.valor.toFixed(2), data, d.fornecedor || 'N/A', formaPagamento];
-      });
-      const wsD = XLSX.utils.aoa_to_sheet([['Tipo', 'Descrição', 'Valor (R$)', 'Data', 'Fornecedor', 'Forma de Pagamento'], ...despesasData]);
-      XLSX.utils.book_append_sheet(wb, wsD, 'Despesas');
+        const despesasData = snapshotD.docs.map(doc => {
+          const d = doc.data();
+          const data = d.data ? new Date(d.data.seconds * 1000).toLocaleDateString() : 'N/A';
+          const formaPagamento = d.formaPagamento ? d.formaPagamento.replace('_', ' ').toUpperCase() : 'N/A';
+          return [d.tipo, d.descricao, d.valor.toFixed(2), data, d.fornecedor || 'N/A', formaPagamento];
+        });
+        const wsD = XLSX.utils.aoa_to_sheet([['Tipo', 'Descrição', 'Valor (R$)', 'Data', 'Fornecedor', 'Forma de Pagamento'], ...despesasData]);
+        XLSX.utils.book_append_sheet(wb, wsD, 'Despesas');
 
-      const vendasData = snapshotV.docs.map(doc => {
-        const d = doc.data();
-        const data = new Date(d.data.seconds * 1000).toLocaleDateString();
-        return [d.nome, d.qtd, d.total.toFixed(2), data];
-      });
-      const wsV = XLSX.utils.aoa_to_sheet([['Produto', 'Quantidade', 'Total (R$)', 'Data'], ...vendasData]);
-      XLSX.utils.book_append_sheet(wb, wsV, 'Vendas');
+        const vendasData = snapshotV.docs.map(doc => {
+          const d = doc.data();
+          const data = d.data ? new Date(d.data.seconds * 1000).toLocaleDateString() : 'N/A';
+          return [d.nome, d.qtd, d.total.toFixed(2), data];
+        });
+        const wsV = XLSX.utils.aoa_to_sheet([['Produto', 'Quantidade', 'Total (R$)', 'Data'], ...vendasData]);
+        XLSX.utils.book_append_sheet(wb, wsV, 'Vendas');
 
-      const totalVendas = snapshotV.docs.reduce((sum, doc) => sum + doc.data().total, 0);
-      const totalDespesas = snapshotD.docs.reduce((sum, doc) => sum + doc.data().valor, 0);
-      const lucroLiquido = totalVendas - totalDespesas;
-      const resumoData = [
-        ['Total Vendas (R$)', totalVendas.toFixed(2)],
-        ['Total Despesas (R$)', totalDespesas.toFixed(2)],
-        ['Lucro Líquido (R$)', lucroLiquido.toFixed(2)]
-      ];
-      const wsR = XLSX.utils.aoa_to_sheet([['Item', 'Valor'], ...resumoData]);
-      XLSX.utils.book_append_sheet(wb, wsR, 'Resumo');
+        const ingredientesData = snapshotI.docs.map(doc => {
+          const d = doc.data();
+          const valorTotal = (d.quantidade * d.custoUnitario).toFixed(2);
+          return [d.nome, d.unidade, d.quantidade.toFixed(2), d.custoUnitario.toFixed(2), d.estoqueMinimo.toFixed(2), valorTotal];
+        });
+        const wsI = XLSX.utils.aoa_to_sheet([['Nome', 'Unidade', 'Quantidade', 'Custo Unitário (R$)', 'Estoque Mínimo', 'Valor Total (R$)'], ...ingredientesData]);
+        XLSX.utils.book_append_sheet(wb, wsI, 'Estoque');
 
-      XLSX.writeFile(wb, 'relatorio_consolidado.xlsx');
+        const movimentacoesData = snapshotM.docs.map(doc => {
+          const d = doc.data();
+          const data = d.data ? new Date(d.data.seconds * 1000).toLocaleDateString() : 'N/A';
+          const formaPagamento = d.formaPagamento ? d.formaPagamento.replace('_', ' ').toUpperCase() : 'N/A';
+          return [d.ingredienteId, d.tipo, d.quantidade.toFixed(2), d.fornecedor || 'N/A', formaPagamento, d.motivo || 'N/A', data];
+        });
+        const wsM = XLSX.utils.aoa_to_sheet([['Ingrediente ID', 'Tipo', 'Quantidade', 'Fornecedor', 'Forma de Pagamento', 'Motivo', 'Data'], ...movimentacoesData]);
+        XLSX.utils.book_append_sheet(wb, wsM, 'Movimentacoes');
 
-      const csv = [
-        'Hambúrgueres\n' + tableToCSV(document.getElementById('tabelaHamburguers')),
-        'Despesas\n' + tableToCSV(document.getElementById('tabelaDespesas')),
-        'Vendas\n' + tableToCSV(document.getElementById('tabelaVendas')),
-        'Resumo\nItem,Valor\n' +
-        `Total Vendas (R$),${totalVendas.toFixed(2)}\n` +
-        `Total Despesas (R$),${totalDespesas.toFixed(2)}\n` +
-        `Lucro Líquido (R$),${lucroLiquido.toFixed(2)}`
-      ].join('\n');
-      downloadCSV(csv, 'relatorio_consolidado.csv');
+        const totalVendas = snapshotV.docs.reduce((sum, doc) => sum + doc.data().total, 0);
+        const totalDespesas = snapshotD.docs.reduce((sum, doc) => sum + doc.data().valor, 0);
+        const lucroLiquido = totalVendas - totalDespesas;
+        const totalEstoque = snapshotI.docs.reduce((sum, doc) => sum + (doc.data().quantidade * doc.data().custoUnitario), 0);
+        const resumoData = [
+          ['Total Vendas (R$)', totalVendas.toFixed(2)],
+          ['Total Despesas (R$)', totalDespesas.toFixed(2)],
+          ['Lucro Líquido (R$)', lucroLiquido.toFixed(2)],
+          ['Valor Total Estoque (R$)', totalEstoque.toFixed(2)]
+        ];
+        const wsR = XLSX.utils.aoa_to_sheet([['Item', 'Valor'], ...resumoData]);
+        XLSX.utils.book_append_sheet(wb, wsR, 'Resumo');
 
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF();
-      doc.text('Relatório Consolidado - BurgzGo', 10, 10);
-      doc.autoTable({ html: '#tabelaHamburguers', startY: 20 });
-      doc.addPage();
-      doc.text('Despesas', 10, 10);
-      doc.autoTable({ html: '#tabelaDespesas' });
-      doc.addPage();
-      doc.text('Vendas', 10, 10);
-      doc.autoTable({ html: '#tabelaVendas' });
-      doc.addPage();
-      doc.text('Resumo', 10, 10);
-      doc.autoTable({
-        head: [['Item', 'Valor']],
-        body: resumoData
-      });
-      doc.save('relatorio_consolidado.pdf');
+        XLSX.writeFile(wb, 'relatorio_consolidado.xlsx');
+
+        const csv = [
+          'Hambúrgueres\n' + tableToCSV(document.getElementById('tabelaHamburguers')),
+          'Despesas\n' + tableToCSV(document.getElementById('tabelaDespesas')),
+          'Vendas\n' + tableToCSV(document.getElementById('tabelaVendas')),
+          'Estoque\n' + tableToCSV(document.getElementById('tabelaIngredientes')),
+          'Movimentações\n' + tableToCSV(document.getElementById('tabelaMovimentacoes')),
+          'Resumo\nItem,Valor\n' +
+          `Total Vendas (R$),${totalVendas.toFixed(2)}\n` +
+          `Total Despesas (R$),${totalDespesas.toFixed(2)}\n` +
+          `Lucro Líquido (R$),${lucroLiquido.toFixed(2)}\n` +
+          `Valor Total Estoque (R$),${totalEstoque.toFixed(2)}`
+        ].join('\n');
+        downloadCSV(csv, 'relatorio_consolidado.csv');
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        doc.text('Relatório Consolidado - BurgzGo', 10, 10);
+        doc.autoTable({ html: '#tabelaHamburguers', startY: 20 });
+        doc.addPage();
+        doc.text('Despesas', 10, 10);
+        doc.autoTable({ html: '#tabelaDespesas' });
+        doc.addPage();
+        doc.text('Vendas', 10, 10);
+        doc.autoTable({ html: '#tabelaVendas' });
+        doc.addPage();
+        doc.text('Estoque', 10, 10);
+        doc.autoTable({ html: '#tabelaIngredientes' });
+        doc.addPage();
+        doc.text('Movimentações de Estoque', 10, 10);
+        doc.autoTable({ html: '#tabelaMovimentacoes' });
+        doc.addPage();
+        doc.text('Resumo', 10, 10);
+        doc.autoTable({
+          head: [['Item', 'Valor']],
+          body: resumoData
+        });
+        doc.save('relatorio_consolidado.pdf');
+      } catch (error) {
+        console.error('Erro ao exportar relatório consolidado:', error);
+        alert('Erro ao gerar relatório consolidado.');
+      }
     }
 
+    // Função para calcular lucro mensal
     async function calcularLucroMensal() {
       const mesAno = document.getElementById('filtroMesLucro').value;
       if (!mesAno) return;
 
-      const [ano, mes] = mesAno.split('-');
-      const dataInicio = new Date(ano, mes - 1, 1);
-      const dataFim = new Date(ano, mes, 0);
+      try {
+        const [ano, mes] = mesAno.split('-');
+        const dataInicio = new Date(ano, mes - 1, 1);
+        const dataFim = new Date(ano, mes, 0);
 
-      const snapshotV = await db.collection('vendas')
-        .where('data', '>=', dataInicio)
-        .where('data', '<=', dataFim)
-        .get();
-      const snapshotD = await db.collection('despesas')
-        .where('data', '>=', dataInicio)
-        .where('data', '<=', dataFim)
-        .get();
+        const snapshotV = await db.collection('vendas')
+          .where('data', '>=', dataInicio)
+          .where('data', '<=', dataFim)
+          .get();
+        const snapshotD = await db.collection('despesas')
+          .where('data', '>=', dataInicio)
+          .where('data', '<=', dataFim)
+          .get();
 
-      const totalVendas = snapshotV.docs.reduce((sum, doc) => sum + doc.data().total, 0);
-      const totalDespesas = snapshotD.docs.reduce((sum, doc) => sum + doc.data().valor, 0);
-      const lucroMensal = totalVendas - totalDespesas;
+        const totalVendas = snapshotV.docs.reduce((sum, doc) => sum + doc.data().total, 0);
+        const totalDespesas = snapshotD.docs.reduce((sum, doc) => sum + doc.data().valor, 0);
+        const lucroMensal = totalVendas - totalDespesas;
 
-      alert(`Lucro Mensal (${mes}/${ano}): R$ ${lucroMensal.toFixed(2)}`);
+        alert(`Lucro Mensal (${mes}/${ano}): R$ ${lucroMensal.toFixed(2)}`);
+      } catch (error) {
+        console.error('Erro ao calcular lucro mensal:', error);
+        alert('Erro ao calcular lucro mensal.');
+      }
     }
 
+    // Função para gerar backup
     async function gerarBackup() {
-      const snapshotH = await db.collection('hamburguers').get();
-      const snapshotD = await db.collection('despesas').get();
-      const snapshotV = await db.collection('vendas').get();
+      try {
+        const snapshotH = await db.collection('hamburguers').get();
+        const snapshotD = await db.collection('despesas').get();
+        const snapshotV = await db.collection('vendas').get();
+        const snapshotI = await db.collection('ingredientes').get();
+        const snapshotM = await db.collection('movimentacoes_estoque').get();
+        const snapshotR = await db.collection('receitas').get();
 
-      const backupData = {
-        hamburguers: snapshotH.docs.map(doc => ({ id: doc.id, ...doc.data() })),
-        despesas: snapshotD.docs.map(doc => ({ id: doc.id, ...doc.data() })),
-        vendas: snapshotV.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-      };
+        const backupData = {
+          hamburguers: snapshotH.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+          despesas: snapshotD.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+          vendas: snapshotV.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+          ingredientes: snapshotI.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+          movimentacoes_estoque: snapshotM.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+          receitas: snapshotR.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        };
 
-      const json = JSON.stringify(backupData, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const ref = storage.ref(`backups/backup-${timestamp}.json`);
+        const json = JSON.stringify(backupData, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const ref = storage.ref(`backups/backup-${timestamp}.json`);
 
-      await ref.put(blob);
-      alert('Backup gerado e salvo no Firebase Storage!');
+        await ref.put(blob);
+        alert('Backup gerado e salvo no Firebase Storage!');
+      } catch (error) {
+        console.error('Erro ao gerar backup:', error);
+        alert('Erro ao gerar backup.');
+      }
     }
 
+    // Função para atualizar gráficos
     function atualizarGraficos(snapshotV, snapshotD) {
-      const meses = [];
-      const lucros = [];
-      const despesas = [];
+      try {
+        const meses = [];
+        const lucros = [];
+        const despesas = [];
 
-      const vendasPorMes = {};
-      snapshotV.forEach(doc => {
-        const data = new Date(doc.data().data.seconds * 1000);
-        const mesAno = `${data.getMonth() + 1}/${data.getFullYear()}`;
-        vendasPorMes[mesAno] = (vendasPorMes[mesAno] || 0) + doc.data().total;
-      });
+        const vendasPorMes = {};
+        snapshotV.forEach(doc => {
+          const data = doc.data().data ? new Date(doc.data().data.seconds * 1000) : new Date();
+          const mesAno = `${data.getMonth() + 1}/${data.getFullYear()}`;
+          vendasPorMes[mesAno] = (vendasPorMes[mesAno] || 0) + doc.data().total;
+        });
 
-      const despesasPorMes = {};
-      snapshotD.forEach(doc => {
-        const data = new Date(doc.data().data.seconds * 1000);
-        const mesAno = `${data.getMonth() + 1}/${data.getFullYear()}`;
-        despesasPorMes[mesAno] = (despesasPorMes[mesAno] || 0) + doc.data().valor;
-      });
+        const despesasPorMes = {};
+        snapshotD.forEach(doc => {
+          const data = doc.data().data ? new Date(doc.data().data.seconds * 1000) : new Date();
+          const mesAno = `${data.getMonth() + 1}/${data.getFullYear()}`;
+          despesasPorMes[mesAno] = (despesasPorMes[mesAno] || 0) + doc.data().valor;
+        });
 
-      const todosMeses = [...new Set([...Object.keys(vendasPorMes), ...Object.keys(despesasPorMes)])].sort();
-      todosMeses.forEach(mes => {
-        meses.push(mes);
-        lucros.push(vendasPorMes[mes] || 0);
-        despesas.push(despesasPorMes[mes] || 0);
-      });
+        const todosMeses = [...new Set([...Object.keys(vendasPorMes), ...Object.keys(despesasPorMes)])].sort();
+        todosMeses.forEach(mes => {
+          meses.push(mes);
+          lucros.push(vendasPorMes[mes] || 0);
+          despesas.push(despesasPorMes[mes] || 0);
+        });
 
-      if (chartLucros) chartLucros.destroy();
-      chartLucros = new Chart(document.getElementById('graficoLucros'), {
-        type: 'line',
-        data: {
-          labels: meses,
-          datasets: [{
-            label: 'Receita (R$)',
-            data: lucros,
-            borderColor: '#FFD700',
-            backgroundColor: 'rgba(255, 215, 0, 0.2)',
-            fill: true
-          }]
-        },
-        options: { scales: { y: { beginAtZero: true } } }
-      });
+        if (chartLucros) chartLucros.destroy();
+        chartLucros = new Chart(document.getElementById('graficoLucros'), {
+          type: 'line',
+          data: {
+            labels: meses,
+            datasets: [{
+              label: 'Receita (R$)',
+              data: lucros,
+              borderColor: '#FFD700',
+              backgroundColor: 'rgba(255, 215, 0, 0.2)',
+              fill: true
+            }]
+          },
+          options: { scales: { y: { beginAtZero: true } } }
+        });
 
-      if (chartDespesas) chartDespesas.destroy();
-      chartDespesas = new Chart(document.getElementById('graficoDespesas'), {
-        type: 'bar',
-        data: {
-          labels: meses,
-          datasets: [{
-            label: 'Despesas (R$)',
-            data: despesas,
-            backgroundColor: '#8B0000'
-          }]
-        },
-        options: { scales: { y: { beginAtZero: true } } }
-      });
+        if (chartDespesas) chartDespesas.destroy();
+        chartDespesas = new Chart(document.getElementById('graficoDespesas'), {
+          type: 'bar',
+          data: {
+            labels: meses,
+            datasets: [{
+              label: 'Despesas (R$)',
+              data: despesas,
+              backgroundColor: '#8B0000'
+            }]
+          },
+          options: { scales: { y: { beginAtZero: true } } }
+        });
+      } catch (error) {
+        console.error('Erro ao atualizar gráficos:', error);
+      }
     }
   </script>
 </body>
