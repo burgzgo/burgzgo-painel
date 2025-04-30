@@ -8,6 +8,7 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
@@ -102,6 +103,21 @@
       font-style: italic;
       color: var(--cinza-escuro);
     }
+    #loginScreen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background-color: var(--cinza-escuro);
+    }
+    #loginScreen input {
+      width: 250px;
+      margin: 0.5rem 0;
+    }
+    #mainContent {
+      display: none;
+    }
     @media (max-width: 768px) {
       body {
         padding: 1rem;
@@ -142,98 +158,120 @@
       table {
         font-size: 0.7rem;
       }
+      #loginScreen input {
+        width: 90%;
+      }
     }
   </style>
 </head>
 <body>
-  <h1>BurgzGo - Painel Financeiro</h1>
-
-  <!-- Seção: Custos -->
-  <div class="section">
-    <h2>🍔 Hambúrgueres</h2>
-    <div>
-      <input type="text" id="nomeHamburguer" placeholder="Nome" />
-      <input type="number" id="custoHamburguer" placeholder="Custo (R$)" min="0" step="0.01" oninput="sugerirPreco()" />
-      <input type="number" id="margem" placeholder="Margem (%)" min="0" step="0.1" oninput="sugerirPreco()" />
-      <input type="number" id="estoque" placeholder="Estoque (unid)" min="0" step="1" />
-      <button onclick="salvarHamburguer()">Calcular Preço</button>
-      <button onclick="exportarTabela('hamburguers')">📁 Exportar</button>
-      <button onclick="exportarRelatorioConsolidado()">📊 Relatório Consolidado</button>
-      <button onclick="gerarBackup()">💾 Gerar Backup</button>
-    </div>
-    <div id="sugestaoPreco" class="sugestao-preco"></div>
-    <div id="erroHamburguer" class="error"></div>
-    <table id="tabelaHamburguers">
-      <tr><th>Nome</th><th>Custo</th><th>Margem</th><th>Preço</th><th>Lucro</th><th>Estoque</th><th>Ações</th></tr>
-    </table>
+  <div id="loginScreen">
+    <h1>BurgzGo - Login</h1>
+    <input type="email" id="email" placeholder="Email" />
+    <input type="password" id="senha" placeholder="Senha" />
+    <div id="erroLogin" class="error"></div>
+    <button onclick="login()">Entrar</button>
   </div>
 
-  <!-- Seção: Despesas -->
-  <div class="section">
-    <h2>💸 Despesas</h2>
-    <div>
-      <select id="tipoDespesa">
-        <option value="fixa">Fixa</option>
-        <option value="variavel">Variável</option>
-      </select>
-      <input type="text" id="descDespesa" placeholder="Descrição" />
-      <input type="number" id="valorDespesa" placeholder="Valor (R$)" min="0" step="0.01" />
-      <input type="date" id="dataDespesa" />
-      <button onclick="salvarDespesa()">Salvar</button>
-      <button onclick="exportarTabela('despesas')">📁 Exportar</button>
-    </div>
-    <div id="erroDespesa" class="error"></div>
-    <div>
-      <label>Filtrar por período:</label>
-      <input type="date" id="filtroDataInicioDespesa" />
-      <input type="date" id="filtroDataFimDespesa" />
-      <button onclick="carregarDados()">Filtrar</button>
-    </div>
-    <table id="tabelaDespesas">
-      <tr><th>Tipo</th><th>Descrição</th><th>Valor</th><th>Data</th><th>Ações</th></tr>
-    </table>
-  </div>
+  <div id="mainContent">
+    <h1>BurgzGo - Painel Financeiro</h1>
+    <button onclick="logout()">Sair</button>
 
-  <!-- Seção: Vendas -->
-  <div class="section">
-    <h2>🛒 Vendas</h2>
-    <div>
-      <input type="text" id="nomeVenda" placeholder="Hambúrguer Vendido" />
-      <input type="number" id="qtdVenda" placeholder="Quantidade" min="1" step="1" />
-      <input type="date" id="dataVenda" />
-      <button onclick="registrarVenda()">Registrar Venda</button>
+    <!-- Seção: Custos -->
+    <div class="section">
+      <h2>🍔 Hambúrgueres</h2>
+      <div>
+        <input type="text" id="nomeHamburguer" placeholder="Nome" />
+        <input type="number" id="custoHamburguer" placeholder="Custo (R$)" min="0" step="0.01" oninput="sugerirPreco()" />
+        <input type="number" id="margem" placeholder="Margem (%)" min="0" step="0.1" oninput="sugerirPreco()" />
+        <input type="number" id="estoque" placeholder="Estoque (unid)" min="0" step="1" />
+        <button onclick="salvarHamburguer()">Calcular Preço</button>
+        <button onclick="exportarTabela('hamburguers')">📁 Exportar</button>
+        <button onclick="exportarRelatorioConsolidado()">📊 Relatório Consolidado</button>
+        <button onclick="gerarBackup()">💾 Gerar Backup</button>
+      </div>
+      <div id="sugestaoPreco" class="sugestao-preco"></div>
+      <div id="erroHamburguer" class="error"></div>
+      <table id="tabelaHamburguers">
+        <tr><th>Nome</th><th>Custo</th><th>Margem</th><th>Preço</th><th>Lucro</th><th>Estoque</th><th>Ações</th></tr>
+      </table>
     </div>
-    <div id="erroVenda" class="error"></div>
-    <div>
-      <label>Filtrar por período:</label>
-      <input type="date" id="filtroDataInicioVenda" />
-      <input type="date" id="filtroDataFimVenda" />
-      <button onclick="carregarDados()">Filtrar</button>
-    </div>
-    <table id="tabelaVendas">
-      <tr><th>Produto</th><th>Qtd</th><th>Total</th><th>Data</th></tr>
-    </table>
-  </div>
 
-  <!-- Seção: Dashboard -->
-  <div class="section">
-    <h2>📊 Dashboard</h2>
-    <div class="lucro-liquido" id="lucroLiquido">Lucro Líquido: R$ 0.00</div>
-    <div>
-      <label>Selecionar Mês/Ano:</label>
-      <input type="month" id="filtroMesLucro" />
-      <button onclick="calcularLucroMensal()">Calcular Lucro Mensal</button>
+    <!-- Seção: Despesas -->
+    <div class="section">
+      <h2>💸 Despesas</h2>
+      <div>
+        <select id="tipoDespesa">
+          <option value="fixa">Fixa</option>
+          <option value="variavel">Variável</option>
+        </select>
+        <input type="text" id="descDespesa" placeholder="Descrição" />
+        <input type="number" id="valorDespesa" placeholder="Valor (R$)" min="0" step="0.01" />
+        <input type="date" id="dataDespesa" />
+        <input type="text" id="fornecedorDespesa" placeholder="Fornecedor" />
+        <select id="formaPagamentoDespesa">
+          <option value="dinheiro">Dinheiro</option>
+          <option value="cartao_credito">Cartão de Crédito</option>
+          <option value="cartao_debito">Cartão de Débito</option>
+          <option value="pix">Pix</option>
+          <option value="boleto">Boleto</option>
+        </select>
+        <button onclick="salvarDespesa()">Salvar</button>
+        <button onclick="exportarTabela('despesas')">📁 Exportar</button>
+      </div>
+      <div id="erroDespesa" class="error"></div>
+      <div>
+        <label>Filtrar por período:</label>
+        <input type="date" id="filtroDataInicioDespesa" />
+        <input type="date" id="filtroDataFimDespesa" />
+        <button onclick="carregarDados()">Filtrar</button>
+      </div>
+      <table id="tabelaDespesas">
+        <tr><th>Tipo</th><th>Descrição</th><th>Valor</th><th>Data</th><th>Fornecedor</th><th>Forma de Pagamento</th><th>Ações</th></tr>
+      </table>
     </div>
-    <div class="charts">
-      <canvas id="graficoLucros"></canvas>
-      <canvas id="graficoDespesas"></canvas>
-    </div>
-  </div>
 
-  <!-- Seção: Configurações -->
-  <div class="section">
-    <h2>⚙️ Configurações</h2>
-    <button onclick="limparBanco()">🧹 Limpar Banco de Dados</button>
+    <!-- Seção: Vendas -->
+    <div class="section">
+      <h2>🛒 Vendas</h2>
+      <div>
+        <input type="text" id="nomeVenda" placeholder="Hambúrguer Vendido" />
+        <input type="number" id="qtdVenda" placeholder="Quantidade" min="1" step="1" />
+        <input type="date" id="dataVenda" />
+        <button onclick="registrarVenda()">Registrar Venda</button>
+      </div>
+      <div id="erroVenda" class="error"></div>
+      <div>
+        <label>Filtrar por período:</label>
+        <input type="date" id="filtroDataInicioVenda" />
+        <input type="date" id="filtroDataFimVenda" />
+        <button onclick="carregarDados()">Filtrar</button>
+      </div>
+      <table id="tabelaVendas">
+        <tr><th>Produto</th><th>Qtd</th><th>Total</th><th>Data</th></tr>
+      </table>
+    </div>
+
+    <!-- Seção: Dashboard -->
+    <div class="section">
+      <h2>📊 Dashboard</h2>
+      <div class="lucro-liquido" id="lucroLiquido">Lucro Líquido: R$ 0.00</div>
+      <div>
+        <label>Selecionar Mês/Ano:</label>
+        <input type="month" id="filtroMesLucro" />
+        <button onclick="calcularLucroMensal()">Calcular Lucro Mensal</button>
+      </div>
+      <div class="charts">
+        <canvas id="graficoLucros"></canvas>
+        <canvas id="graficoDespesas"></canvas>
+      </div>
+    </div>
+
+    <!-- Seção: Configurações -->
+    <div class="section">
+      <h2>⚙️ Configurações</h2>
+      <button onclick="limparBanco()">🧹 Limpar Banco de Dados</button>
+    </div>
   </div>
 
   <script>
@@ -248,12 +286,47 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
     const storage = firebase.storage();
+    const auth = firebase.auth();
     let chartLucros, chartDespesas;
 
     function mostrarErro(id, mensagem) {
       document.getElementById(id).innerText = mensagem;
       setTimeout(() => document.getElementById(id).innerText = '', 5000);
     }
+
+    async function login() {
+      const email = document.getElementById('email').value.trim();
+      const senha = document.getElementById('senha').value;
+      if (!email || !senha) return mostrarErro('erroLogin', 'Preencha email e senha.');
+
+      try {
+        await auth.signInWithEmailAndPassword(email, senha);
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('mainContent').style.display = 'block';
+        carregarDados();
+      } catch (error) {
+        mostrarErro('erroLogin', 'Credenciais inválidas ou erro de conexão.');
+      }
+    }
+
+    async function logout() {
+      await auth.signOut();
+      document.getElementById('mainContent').style.display = 'none';
+      document.getElementById('loginScreen').style.display = 'flex';
+      document.getElementById('email').value = '';
+      document.getElementById('senha').value = '';
+    }
+
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('mainContent').style.display = 'block';
+        carregarDados();
+      } else {
+        document.getElementById('mainContent').style.display = 'none';
+        document.getElementById('loginScreen').style.display = 'flex';
+      }
+    });
 
     async function sugerirPreco() {
       const custo = parseFloat(document.getElementById('custoHamburguer').value) || 0;
@@ -299,14 +372,27 @@
       const descricao = document.getElementById('descDespesa').value.trim();
       const valor = parseFloat(document.getElementById('valorDespesa').value);
       const dataDespesa = document.getElementById('dataDespesa').value || new Date().toISOString().split('T')[0];
+      const fornecedor = document.getElementById('fornecedorDespesa').value.trim();
+      const formaPagamento = document.getElementById('formaPagamentoDespesa').value;
 
       if (!descricao) return mostrarErro('erroDespesa', 'Descrição é obrigatória.');
       if (isNaN(valor) || valor < 0) return mostrarErro('erroDespesa', 'Valor deve ser um número positivo.');
+      if (!fornecedor) return mostrarErro('erroDespesa', 'Fornecedor é obrigatório.');
 
-      await db.collection('despesas').add({ tipo, descricao, valor, data: new Date(dataDespesa), timestamp: new Date() });
+      await db.collection('despesas').add({
+        tipo,
+        descricao,
+        valor,
+        data: new Date(dataDespesa),
+        fornecedor,
+        formaPagamento,
+        timestamp: new Date()
+      });
       document.getElementById('descDespesa').value = '';
       document.getElementById('valorDespesa').value = '';
       document.getElementById('dataDespesa').value = '';
+      document.getElementById('fornecedorDespesa').value = '';
+      document.getElementById('formaPagamentoDespesa').value = 'dinheiro';
     }
 
     async function registrarVenda() {
@@ -370,11 +456,12 @@
       if (filtroInicioDespesa) queryD = queryD.where('data', '>=', new Date(filtroInicioDespesa));
       if (filtroFimDespesa) queryD = queryD.where('data', '<=', new Date(filtroFimDespesa));
       queryD.onSnapshot(snapshot => {
-        let htmlD = "<tr><th>Tipo</th><th>Descrição</th><th>Valor</th><th>Data</th><th>Ações</th></tr>";
+        let htmlD = "<tr><th>Tipo</th><th>Descrição</th><th>Valor</th><th>Data</th><th>Fornecedor</th><th>Forma de Pagamento</th><th>Ações</th></tr>";
         snapshot.forEach(doc => {
           const d = doc.data();
           const data = new Date(d.data.seconds * 1000).toLocaleDateString();
-          htmlD += `<tr><td contenteditable onblur="editarCampo('${doc.id}', 'despesas', 'tipo', this)">${d.tipo}</td><td contenteditable onblur="editarCampo('${doc.id}', 'despesas', 'descricao', this)">${d.descricao}</td><td contenteditable onblur="editarCampo('${doc.id}', 'despesas', 'valor', this)">R$${d.valor.toFixed(2)}</td><td>${data}</td><td><button class="icon" onclick="deletarDocumento('despesas', '${doc.id}')">🗑️</button></td></tr>`;
+          const formaPagamento = d.formaPagamento ? d.formaPagamento.replace('_', ' ').toUpperCase() : 'N/A';
+          htmlD += `<tr><td contenteditable onblur="editarCampo('${doc.id}', 'despesas', 'tipo', this)">${d.tipo}</td><td contenteditable onblur="editarCampo('${doc.id}', 'despesas', 'descricao', this)">${d.descricao}</td><td contenteditable onblur="editarCampo('${doc.id}', 'despesas', 'valor', this)">R$${d.valor.toFixed(2)}</td><td>${data}</td><td contenteditable onblur="editarCampo('${doc.id}', 'despesas', 'fornecedor', this)">${d.fornecedor || 'N/A'}</td><td>${formaPagamento}</td><td><button class="icon" onclick="deletarDocumento('despesas', '${doc.id}')">🗑️</button></td></tr>`;
         });
         document.getElementById('tabelaDespesas').innerHTML = htmlD;
         atualizarDashboard();
@@ -423,8 +510,10 @@
     async function editarCampo(id, colecao, campo, elemento) {
       let valor = elemento.innerText.replace(/[R$%]/g, '').trim();
       if (!valor) return mostrarErro('erro' + colecao.charAt(0).toUpperCase() + colecao.slice(1), 'Campo não pode ser vazio.');
-      if (!isNaN(valor)) valor = parseFloat(valor);
-      if (typeof valor === 'number' && valor < 0) return mostrarErro('erro' + colecao.charAt(0).toUpperCase() + colecao.slice(1), 'Valor deve ser não negativo.');
+      if (campo === 'valor' || campo === 'custo' || campo === 'margem' || campo === 'estoque') {
+        valor = parseFloat(valor);
+        if (isNaN(valor) || valor < 0) return mostrarErro('erro' + colecao.charAt(0).toUpperCase() + colecao.slice(1), 'Valor deve ser um número não negativo.');
+      }
       await db.collection(colecao).doc(id).update({ [campo]: valor });
     }
 
@@ -479,9 +568,10 @@
       const despesasData = snapshotD.docs.map(doc => {
         const d = doc.data();
         const data = new Date(d.data.seconds * 1000).toLocaleDateString();
-        return [d.tipo, d.descricao, d.valor.toFixed(2), data];
+        const formaPagamento = d.formaPagamento ? d.formaPagamento.replace('_', ' ').toUpperCase() : 'N/A';
+        return [d.tipo, d.descricao, d.valor.toFixed(2), data, d.fornecedor || 'N/A', formaPagamento];
       });
-      const wsD = XLSX.utils.aoa_to_sheet([['Tipo', 'Descrição', 'Valor (R$)', 'Data'], ...despesasData]);
+      const wsD = XLSX.utils.aoa_to_sheet([['Tipo', 'Descrição', 'Valor (R$)', 'Data', 'Fornecedor', 'Forma de Pagamento'], ...despesasData]);
       XLSX.utils.book_append_sheet(wb, wsD, 'Despesas');
 
       const vendasData = snapshotV.docs.map(doc => {
@@ -635,8 +725,6 @@
         options: { scales: { y: { beginAtZero: true } } }
       });
     }
-
-    carregarDados();
   </script>
 </body>
 </html>
